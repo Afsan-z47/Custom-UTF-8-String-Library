@@ -39,20 +39,31 @@ void generate_report() {
     // 1. Test NULL byte handling
     utf8_string null_test = from("A\0B");  // Will be truncated at first NULL
     utf8_concat_literal(&report, "1. NULL Handling: ");
-    utf8_concat_literal(&report, (null_test.length == 1) ? "FAIL (truncated)\n" : "PASS\n");
+    utf8_concat_literal(&report, (null_test.length == 1) ? "FAIL ( Can't concat literal past NULL)\n" : "PASS\n");
     
     // 2. Test buffer overflow protection
     utf8_string overflow_test = from("\xC2");
     unsigned cp = decode_utf8_char(overflow_test.data);  // Reads past buffer
     utf8_concat_literal(&report, "2. Buffer Safety: ");
-    utf8_concat_literal(&report, (cp == 0xFFFD) ? "PASS\n" : "FAIL (overflow risk)\n");
+    utf8_concat_literal(&report, (cp == 0xFFFD) ? "PASS -- WARINING: PASSING because of GARBAGE VALUES\n" : "FAIL (overflow risk) -- NOTE: Happened due to Truncated sequence\n");
 
     // 3. Test slice safety
     utf8_string parent = from("Parent");
+    utf8_string cmp    = from("Pare");
+   
     utf8_slice child = slice_byte(&parent, 0, 3);
     utf8_concat_literal(&parent, "Modified");  // Invalidate slice
-    utf8_concat_literal(&report, "3. Slice Safety: ");
-    utf8_concat_literal(&report, (memcmp(child.data, "Par", 3) == 0) ? "FAIL (dangling ptr)\n" : "PASS\n");
+    utf8_concat_literal(&report, "3.A: Slice Safety: ");
+    utf8_concat_literal(&report, (memcmp(child.data, cmp.data, 4) == 0) ? "FAIL (dangling pointers)\n" : "PASS\n");
+
+// New test: Slice Write Protection
+    utf8_string parent2 = from("Hello");
+    utf8_slice slice = slice_byte(&parent2, 0, 3); // "Hell"
+    utf8_concat_literal(&slice, "o"); // This should fail as slice is read-only
+    utf8_concat_literal(&report, "3.B: Slice Write Protection: ");
+    int parent2_unchanged = (parent2.length == 5) && (memcmp(parent2.data, "Hello", 5) == 0);
+    utf8_concat_literal(&report, parent2_unchanged ? "PASS\n" : "FAIL\n");
+    utf8_free(&parent2);
 
     // 4. Test error propagation
     utf8_string bad_str = from("\xED\xA0\x80");  // Invalid surrogate
@@ -66,7 +77,7 @@ void generate_report() {
     for(int i=0; i<1000; i++) utf8_concat_literal(&growth_test, "A");
     utf8_concat_literal(&report, "5. Memory Growth: ");
     utf8_concat_literal(&report, (growth_test.capacity > initial_cap) ? "PASS\n" : "FAIL\n");
-
+   
     // 6. Test alignment logic
     utf8_string align_test = from("\xE2\x82");  // Partial 3-byte
     utf8_slice partial = slice_byte(&align_test, 0, 2);
@@ -173,4 +184,3 @@ int main(void) {
     generate_report();
     return 0;
 }
-
