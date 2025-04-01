@@ -52,7 +52,9 @@ int seek_char(utf8_string* src, unsigned int gap);
 //Could use a length perameter for the fix but it seems to lose its modularity.
 //When decoding some data sequentially, those functions should handle the problem externally.
 // For Truncated Sequence, there will be problem reported by -fsanitize=address.
-// The 1st test for Invalid sequnce is where the problem is occurring.
+// The 1st test for Invalid sequnce is where the problem is occurring. 
+// It is accessing the next byte of the Truncated Sequence which does not exist
+// in its bounded memory. Thus, heap-buffer-overflow occurs.
 
 
 
