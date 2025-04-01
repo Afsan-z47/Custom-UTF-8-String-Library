@@ -1,4 +1,4 @@
-z#include <stdio.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #define UTF8_Tail 0b00111111
@@ -52,11 +52,7 @@ int seek_char(utf8_string* src, unsigned int gap);
 //Could use a length perameter for the fix but it seems to lose its modularity.
 //When decoding some data sequentially, those functions should handle the problem externally.
 // For Truncated Sequence, there will be problem reported by -fsanitize=address.
-// The 1st test for Invalid sequnce is where the problem is occurring. 
-// It is accessing the next byte of the Truncated Sequence which does not exist
-// in its bounded memory. Thus, heap-buffer-overflow occurs.
-
-
+// The 1st test for Invalid sequnce is where the problem is occurring.
 
 unsigned int decode_utf8_char(unsigned char* Input) {
 
@@ -210,6 +206,10 @@ utf8_string from(char* input) {
 
 
 void utf8_concat(utf8_string* s1, utf8_string* s2) {
+    //NOTE: Handles Invalid Slice writes
+    if(s1->capacity == 0){
+            fprintf(stderr, "Invalid write through slice\n");
+    }
     int new_size = s1->length + s2->length;
 
     if( new_size > s1->capacity){
@@ -236,6 +236,10 @@ void utf8_concat(utf8_string* s1, utf8_string* s2) {
 } 
 
 void utf8_concat_literal(utf8_string* s1, char* s2) {
+    //NOTE: Handles Invalid Slice writes
+    if(s1->capacity == 0){
+            fprintf(stderr, "Invalid write through slice. capacity : %u\n", s1->capacity);
+    }
     int len2 = strlen(s2);
     int new_size = s1->length + len2; 
 
@@ -294,7 +298,8 @@ utf8_slice slice_byte(utf8_string* src, unsigned int from, unsigned int till){
         return slice;
     }
     slice.data += from;
-    slice.length = till - from;
+    //NOTE: Corrected Indexing. Now slice_byte(src, 0, 4) will have a length of 5
+    slice.length = till - from + 1;
     return slice;
 }
 
@@ -313,7 +318,7 @@ utf8_slice slice_char(utf8_string* src, unsigned int from, unsigned int till){
     }
 
     //TODO: Memoization search system could be applied here.
-    //NOTE: Auto sequrity checks in seek_char.
+    //NOTE: Auto security checks in seek_char.
     unsigned int char_till = seek_char(src, till);
     unsigned int char_from = seek_char(src, from);
     utf8_string slice = slice_byte(src, char_from, char_till);
@@ -356,7 +361,6 @@ utf8_string to_owned(utf8_string* slice){
 int seek_char(utf8_string* src, unsigned int gap){
     //NOTE: NULL input and NULL data check
     if( !src || !src->data || !gap) return 0;
-    if( !gap) return 0;
 
     dbg("src->length : %u\n", src->length);
     int seek = 0;
@@ -378,17 +382,33 @@ int seek_char(utf8_string* src, unsigned int gap){
     dbg("Seek: %d\n", seek);
     return seek;
 }
-
 void delete_byte(utf8_string* src, unsigned int from, unsigned int till){
-    utf8_slice slice_2 = slice_byte(src, till,src->length);
-    memcpy(src->data + from, slice_2.data, src->length - till);
-    src->length = src->length - (till - from);
-    //FIXME: Possible length error
+ 
+    //NOTE: Object Out of Bound
+    if( till > src->length || from > src->length || (till - from) > src->length ){ 
+    fprintf(stderr, "Out of bounds byte position\n");
+    return;
+    }
+    utf8_slice slice_2 = slice_byte(src, till + 1,src->length); //NOTE: till + 1 for the next byte from till(th) byte
+    memmove(src->data + from, slice_2.data, src->length - till);
+    src->length = src->length - (till - from + 1); //NOTE: FIXED length indexing
 }
 
 void delete_char(utf8_string* src, unsigned int from, unsigned int till){
+    int char_count = 0;
+    for(int i=0; i<src->length; i++){
+        if(is_utf8_valid(&src->data[i])) char_count++;
+    }
+    //NOTE: Object Out of Bound
+    if( till > char_count || from > char_count || (till - from) > char_count ){ 
+        fprintf(stderr, "Out of bounds byte position\n");
+        return;
+    }
+ 
     int pos_head = seek_char(src, from);
-    int pos_tail = seek_char(src, till);
+    int pos_tail = seek_char(src, till + 1); //NOTE: The next character from till
+    
+
     utf8_slice slice_2 = slice_byte(src, pos_tail, src->length);
     memcpy(src->data + pos_head, slice_2.data, src->length - pos_tail);
     dbg("deleted_char.data     -> ");
@@ -402,6 +422,13 @@ void delete_char(utf8_string* src, unsigned int from, unsigned int till){
 }
 
 void insert (utf8_string* dest, utf8_string* src, unsigned int location){
+    //NOTE: Handles Invalid Slice writes
+    if(dest->capacity == 0){
+            fprintf(stderr, "Invalid write through slice\n");
+    }
+    //NOTE: Here string slices can be inserted. But, can't be inserted to a slice.
+
+
     int new_size = dest->length + src->length;
 
     if( new_size > dest->capacity){
