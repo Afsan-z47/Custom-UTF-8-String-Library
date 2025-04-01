@@ -196,11 +196,11 @@ void test_insert_delete() {
     test_assert(utf8_compare(&base, "StartMiddleEnd"), "Insert operation works");
 
     // Delete the inserted portion.
-    delete_char(&base, 5, 11);
+    delete_char(&base, 5, 10);
     test_assert(utf8_compare(&base, "StartEnd"), "Delete operation works");
 
     // Delete from beginning.
-    delete_char(&base, 0, 5);
+    delete_char(&base, 0, 4);
     test_assert(utf8_compare(&base, "End"), "Delete from start works");
 
     utf8_free(&base);
@@ -248,6 +248,78 @@ void test_iterative_print() {
     utf8_free(&s);
 }
 
+/*******************************
+ * 11. Delete Operations Tests
+ *******************************/
+void test_delete_operations() {
+    test_header("Delete Operations");
+
+    // --- delete_byte tests ---
+    // Test 1: Delete middle bytes
+    utf8_string s1 = from("HelloWorld");
+    delete_byte(&s1, 5, 7); // Delete 'W','o','r' (bytes 5-7)
+   test_assert(utf8_compare(&s1, "Hellold"), "delete_byte: middle bytes");
+    utf8_free(&s1);
+
+    // Test 2: Delete from start
+    utf8_string s2 = from("Test");
+    delete_byte(&s2, 0, 2); // Delete first 3 bytes ('T','e','s')
+    test_assert(utf8_compare(&s2, "t"), "delete_byte: from start");
+    utf8_free(&s2);
+
+    // Test 3: Delete till end
+    utf8_string s3 = from("Example");
+    delete_byte(&s3, 3, 6); // Delete bytes 3-6 ('m','p','l','e')
+    test_assert(utf8_compare(&s3, "Exa"), "delete_byte: till end");
+    utf8_free(&s3);
+
+    // Test 4: Single byte deletion
+    utf8_string s4 = from("A");
+    delete_byte(&s4, 0, 0);
+    test_assert(s4.length == 0, "delete_byte: single byte");
+    utf8_free(&s4);
+
+    // Test 5: Split multi-byte character
+    utf8_string s5 = from("¢a"); // '¢' is C2 A2, 'a' is 61
+    delete_byte(&s5, 1, 1); // Delete A2, leaving C2 61
+    test_assert(s5.length == 2, "delete_byte: split multi-byte length");
+    unsigned cp = decode_utf8_char(s5.data);
+    test_assert(cp == 0xFFFD, "delete_byte: split multi-byte handling");
+    utf8_free(&s5);
+
+    // --- delete_char tests ---
+    // Test 6: Delete middle ASCII characters
+    utf8_string s6 = from("Hello");
+    delete_char(&s6, 1, 3); // Delete 'e','l','l'
+ 
+    test_assert(utf8_compare(&s6, "Ho"), "delete_char: middle ASCII");
+    utf8_free(&s6);
+
+    // Test 7: Delete multi-byte characters
+    utf8_string s7 = from("a¢€"); // a (1B), ¢ (2B), € (3B)
+    delete_char(&s7, 1, 2); // Delete ¢ and €
+    test_assert(utf8_compare(&s7, "a"), "delete_char: multi-byte removal");
+    utf8_free(&s7);
+
+    // Test 8: Delete single multi-byte character
+    utf8_string s8 = from("a¢€");
+    delete_char(&s8, 1, 1); // Delete ¢
+    test_assert(utf8_compare(&s8, "a€"), "delete_char: single multi-byte");
+    utf8_free(&s8);
+
+    // Test 9: Invalid byte range (no-op)
+    utf8_string s9 = from("Test");
+    delete_byte(&s9, 5, 10); // Beyond length
+    test_assert(utf8_compare(&s9, "Test"), "delete_byte: invalid range");
+    utf8_free(&s9);
+
+    // Test 10: Invalid char range (no-op)
+    utf8_string s10 = from("Test");
+    delete_char(&s10, 2, 5); // Beyond char count
+    test_assert(utf8_compare(&s10, "Test"), "delete_char: invalid range");
+    utf8_free(&s10);
+}
+
 int main() {
     printf("Starting Comprehensive UTF-8 Library Tests\n");
 
@@ -257,6 +329,7 @@ int main() {
     test_slicing();
     test_seeking();
     test_insert_delete();
+    test_delete_operations(); // Add this line
     test_memory_realloc();
     test_memory_safety();
     test_edge_cases();
@@ -275,4 +348,3 @@ int main() {
 
     return fail_count ? EXIT_FAILURE : EXIT_SUCCESS;
 }
-
